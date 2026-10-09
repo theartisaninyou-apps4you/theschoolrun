@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ pool.name }}</h1>
+
+<div class="card">
+    <div class="row pool-heading">
+        <div><h2 style="margin-bottom:4px">🙋 Available lifts</h2><p class="muted" style="margin-top:0">A simple list of journeys you can join. Pick a child, then choose <strong>Add child to this lift</strong>.</p></div>
+        <div class="view-toggle">
+            <a class="button {% if not mine %}secondary{% endif %}" href="{{ url_for('pool_detail', pool_id=pool.id) }}">Available lifts</a>
+            <a class="button {% if not mine %}secondary{% endif %}" href="{{ url_for('pool_detail', pool_id=pool.id, mine=1) }}">My offered lifts</a>
+        </div>
+    </div>
+
+    {% if mine %}
+        <p class="muted small-note">Here are the lifts you are driving. You can edit the date, start time, spaces or pickup location.</p>
+    {% endif %}
+
+    <div class="lift-list">
+    {% for a in availabilities %}
+        {% if (mine and a.user_id == session.get('user_id')) or (not mine and a.user_id != session.get('user_id') and (a.driver_mode == 'confirmed' or remaining_seats(a) > 0)) %}
+        <div class="lift-card {% if a.user_id == session.get('user_id') %}my-lift-card{% endif %}">
+            <div class="lift-list-main">
+                <div>
+                    <h3>🚗 {{ a.user.name }}{% if a.user_id == session.get('user_id') %} <span class="badge">Your lift</span>{% endif %}</h3>
+                    <p class="lift-time">{{ a.start_time.strftime('%A %d %b') }} · {{ pretty_time(a.start_time) }}–{{ pretty_time(a.end_time) }}</p>
+                    {% if a.pickup_location %}<p>📍 {{ a.pickup_location }}</p>{% endif %}
+                    <p><strong>{{ remaining_seats(a) }}</strong> vacant spot(s) · {% if a.driver_mode == 'confirmed' %}<span class="badge status-confirmed">✓ Confirmed drive</span>{% else %}<span class="badge status-offered">○ Backup availability</span>{% endif %}</p>
+                    {% if mine %}
+                        <p class="muted">Passengers: {% set passengers=journey_passengers(a) %}{% if passengers %}{% for b in passengers %}{{ b.child.name if b.child else b.rider.name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}None yet{% endif %}</p>
+                    {% endif %}
+                </div>
+                {% if not mine and children %}
+                <form method="post" action="{{ url_for('join_available_lift', pool_id=pool.id, availability_id=a.id) }}" class="lift-join-form">
+                    <label for="child-{{ a.id }}">Who is travelling?</label>
+                    <select id="child-{{ a.id }}" name="child_id" required>
+                        <option value="">Choose a child…</option>
+                        {% for child in children %}<option value="{{ child.id }}">{{ child.name }}{% if child.year_group %} · {{ child.year_group }}{% endif %}</option>{% endfor %}
+                    </select>
+                    <button class="join-button" type="submit">Add child to this lift →</button>
+                    {% if a.driver_mode != 'confirmed' %}<p class="muted small-note">Backup driver for this time. If the confirmed cars are full, this driver can be promoted automatically.</p>{% endif %}
+                </form>
+                {% elif not mine and not children %}<a class="button join-button" href="{{ url_for('profile') }}">Add children first</a>{% endif %}
+            </div>
+
+            {% if mine %}
+            <details class="edit-lift-box">
+                <summary>✏️ Edit this lift</summary>
+                <form method="post" action="{{ url_for('edit_availability', pool_id=pool.id, availability_id=a.id) }}" class="availability-form compact-edit-form">
+                    <div class="row">
+                        <div><label>Date</label><input type="date" name="lift_date" value="{{ a.start_time.strftime('%Y-%m-%d') }}" required></div>
+                        <div><label>Start time</label><input class="start-time-input" type="time" name="start_time" min="07:00" max="21:30" step="60" value="{{ a.start_time.strftime('%H:%M') }}" required></div>
+                        <div><label>Estimate Finish Time</label><select class="finish-time" disabled></select><input type="hidden" name="end_time" value="{{ a.end_time.strftime('%H:%M') }}"></div>
+                        <div><label>Vacant spots</label><input type="number" name="seats_available" min="1" max="20" value="{{ a.seats_available }}" required></div>
+                    </div>
+                    <label>Named passengers (your children)</label><div class="children">{% for child in a.user.children if child.active %}<label class="child-choice"><input type="checkbox" name="child_ids" value="{{ child.id }}" {% if journey_passengers(a)|selectattr('rider_id','equalto',a.user_id)|selectattr('child_id','equalto',child.id)|list %}checked{% endif %}> {{ child.name }}</label>{% else %}<span class="muted small-note">No active children on this family profile.</span>{% endfor %}</div>
+                    <p class="muted small-note">You can add or remove named passengers at any time.</p>
+                    <label>Pickup location (optional)</label><input type="text" name="pickup_location" maxlength="255" value="{{ a.pickup_location or '' }}" placeholder="e.g. School gate / Smith Street">
+                    <button type="submit">Save changes</button>
+                </form>
+                {% if journey_passengers(a) %}<p class="muted small-note">⚠️ This lift has booked passengers. If you change or delete it, affected parents will be notified. If another offered driver is available for the same slot, they can take over the booked passengers.</p>{% endif %}
+                <form method="post" action="{{ url_for('delete_availability', availability_id=a.id) }}" onsubmit="return confirm('Delete this lift? Any booked passengers will be moved to another available driver for the same time if possible.');"><button type="submit" class="danger">🗑 Delete this lift</button></form>
+            </details>
+            {% endif %}
+
+            {% if not mine and a.driver_mode == 'confirmed' and matching_driver_options(a) %}
+            <details class="swap-box"><summary>Change / swap driver</summary><form method="post" action="{{ url_for('change_driver', pool_id=pool.id, availability_id=a.id) }}"><label>New driver</label><select name="driver_id" required>{% for member in matching_driver_options(a) %}<option value="{{ member.id }}">{{ member.name }}</option>{% endfor %}</select><button type="submit" class="secondary">Swap driver for this time</button></form><p class="muted small-note">Only parents who have marked themselves available for this exact time are shown.</p></details>
+            {% endif %}
+        </div>
+        {% endif %}
+    {% else %}
+        <div class="empty-state"><p class="muted">{% if mine %}You have not offered any lifts in this Pool yet.{% else %}No available lifts yet.{% endif %}</p>{% if mine %}<a class="button" href="{{ url_for('calendar_view', offer=1) }}">➕ Offer a lift</a>{% endif %}</div>
+    {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <h2>🚗 Offer a lift</h2>
+    <div class="offer-calendar-link">
+        <a class="button" href="{{ url_for('calendar_view', offer=1) }}">📅 Add lifts across my week</a>
+        <p class="muted">For regular school runs, use the weekly calendar to add several days at once.</p>
+    </div>
+    <hr>
+    <h3>➕ Add an individual lift</h3>
+    <form method="post" action="{{ url_for('add_availability', pool_id=pool.id) }}" class="availability-form">
+        <label>Date</label><input type="date" name="lift_date" required>
+        <label>Driver</label>
+        <select name="driver_id" required>{% for member in pool_members %}<option value="{{ member.id }}" {% if member.id == session.get('user_id') %}selected{% endif %}>{{ member.name }}{% if member.id == session.get('user_id') %} (you){% endif %}</option>{% endfor %}</select>
+        <p class="muted small-note">The driver defaults to you. If delegated availability is enabled, you can select another parent in this Pool.</p>
+        <label>Driver arrangement</label>
+        <div class="children driver-choice-list"><div class="driver-choice"><label class="child-choice"><input type="radio" name="driver_mode" value="confirmed" checked> <strong>Driving Definitely</strong></label><details class="info-help"><summary>ⓘ</summary><div>You are saying that you will make the drive for this time slot.</div></details></div><div class="driver-choice"><label class="child-choice"><input type="radio" name="driver_mode" value="randomized"> <strong>Available to Drive</strong></label><details class="info-help"><summary>ⓘ</summary><div>You can do the drive, or you are happy to have another parent drive and give you or your child a lift.</div></details></div></div>
+        <p class="muted small-note">With Available to Drive, you can do the drive or are happy to have another parent drive and give you or your child a lift. Your saved share-lift preference is used if the app needs to place you or your children on the shared-lift list.</p>
+        <label>Passenger names</label><div class="confirmed-passenger-note muted small-note">For <strong>Driving Definitely</strong>, your active children are included automatically in the confirmed run.</div><div class="driver-choice-list flexible-passenger-options"><label class="child-choice"><input type="radio" name="child_assignment" value="now" {% if user.child_assignment_preference == 'now' %}checked{% endif %}> <strong>Add selected child name(s) now</strong></label><label class="child-choice"><input type="radio" name="child_assignment" value="later" {% if user.child_assignment_preference != 'now' %}checked{% endif %}> No child for this lift yet — add later</label></div>
+        <div class="flexible-passenger-options"><label>Children travelling with the driver (for Available to Drive)</label><div class="children">{% for child in user.children if child.active %}<label class="child-choice"><input type="checkbox" name="child_ids" value="{{ child.id }}" class="availability-child-checkbox"> {{ child.name }}</label>{% else %}<span class="muted small-note">No active children on your family profile. You can add one later.</span>{% endfor %}</div>
+        <p class="muted small-note">No child selected is allowed. You can add or remove named passengers later from My offered lifts.</p></div>
+        <div class="row"><div><label>Start time</label><input class="start-time-input" type="time" name="start_time" min="07:00" max="21:30" step="60" value="07:30" required></div><div><label>Estimate Finish Time</label><select class="finish-time" disabled></select><input type="hidden" name="end_time" value="08:00"></div><div><label>Vacant spots for other families</label><input type="number" name="seats_available" min="1" max="20" value="2" required></div></div>
+        <label>Pickup location (optional)</label><input type="text" name="pickup_location" maxlength="255" placeholder="e.g. School gate / Smith Street">
+        <button type="submit">Publish one lift</button>
+    </form>
+</div>
+
+{% if pool.created_by_id == session.get('user_id') %}<div class="card"><h2>⚙️ Group availability permission</h2><form method="post" action="{{ url_for('update_delegated_availability', pool_id=pool.id) }}"><label class="child-choice"><input type="checkbox" name="allow_delegated_availability" value="1" {% if pool.allow_delegated_availability %}checked{% endif %}> Allow Pool members to add availability on behalf of another parent</label><p class="muted small-note">When enabled, members can select another parent as the driver.</p><button type="submit">Save permission</button></form></div>{% endif %}
+<div class="card"><h2>🔗 Pool code</h2><p>Give this code to approved parents so they can join from their Dashboard.</p><div class="code-box"><strong>{{ pool.invite_code }}</strong></div><p class="muted">Share link:</p><code>{{ request.host_url }}pools/join/{{ pool.invite_code }}</code></div>
+<div class="card"><h2>👥 People in this Pool</h2>{% for member in pool.members %}<p>{{ member.name }} · {{ member.children|selectattr('active')|list|length }} child(ren) on family profile</p>{% endfor %}</div>
+<div class="card"><h2>Backup runs</h2>{% for spot in randomized_spots %}<p>Waiting for a driver · {{ spot.child.name if spot.child else spot.rider.name }} · {{ spot.randomized_availability.start_time.strftime('%a %d %b') }}, {{ pretty_time(spot.randomized_availability.start_time) }}</p>{% else %}<p class="muted">Offered availability</p>{% endfor %}</div>
+
+<script>
+(function () {
+  function plus30(value) { const p=value.split(':').map(Number); if(p.length!==2 || Number.isNaN(p[0]) || Number.isNaN(p[1])) return ''; let m=p[0]*60+p[1]+30; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+  document.querySelectorAll('.availability-form').forEach(form => {
+    const time=form.querySelector('.start-time-input'), finish=form.querySelector('.finish-time'), hiddenEnd=form.querySelector('input[name="end_time"]');
+    if(!time||!finish||!hiddenEnd)return;
+    function update(){ const e=plus30(time.value); finish.innerHTML=''; if(e){const o=document.createElement('option');o.value=e;o.textContent=e;finish.appendChild(o);hiddenEnd.value=e;} }
+    time.addEventListener('input',update); update();
+  });
+  document.querySelectorAll('.availability-form').forEach(form => {
+    const nowRadio=form.querySelector('input[name="child_assignment"][value="now"]');
+    const modeRadios=form.querySelectorAll('input[name="driver_mode"]');
+    const flexibleOptions=form.querySelectorAll('.flexible-passenger-options');
+    function syncPassengerMode(){
+      const mode=form.querySelector('input[name="driver_mode"]:checked')?.value;
+      flexibleOptions.forEach(el=>el.style.display = mode === 'randomized' ? '' : 'none');
+      if(mode === 'confirmed' && nowRadio) nowRadio.checked=true;
+    }
+    modeRadios.forEach(r=>r.addEventListener('change',syncPassengerMode));
+    form.querySelectorAll('.availability-child-checkbox').forEach(cb=>cb.addEventListener('change',()=>{ if(cb.checked && nowRadio) nowRadio.checked=true; }));
+    syncPassengerMode();
+  });
+})();
+</script>
+{% endblock %}

@@ -34,6 +34,12 @@ elif database_url.startswith("postgresql://"):
     )
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+# Check connections before reusing them and
+# recycle older connections after five minutes.
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+}
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER", "smtp.gmail.com")

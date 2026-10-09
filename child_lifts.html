@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row">
+  <div>
+    <h1>👤 {{ child.name }}'s booked lifts</h1>
+    <p class="muted">Only lifts booked for {{ child.name }} are shown here. Your full family schedule remains in This week's calendar.</p>
+  </div>
+  <a class="button secondary" href="{{ url_for('dashboard') }}">← Back to Dashboard</a>
+</div>
+
+<div class="card">
+  {% for booking in bookings %}
+    <div class="slot slot-booked">
+      <strong>{{ booking.driver_availability.start_time.strftime('%a %d %b %Y') }} · {{ pretty_time(booking.driver_availability.start_time) }}–{{ pretty_time(booking.driver_availability.end_time) }}</strong>
+      <div>🚗 <b>Driver:</b> {{ booking.driver_availability.user.name }}</div>
+      <div>🏫 <b>Pool:</b> {{ booking.driver_availability.pool.name }}</div>
+      <div><span class="badge">{{ booking.status }}</span></div>
+    </div>
+  {% else %}
+    <p class="muted">{{ child.name }} has no booked lifts yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}

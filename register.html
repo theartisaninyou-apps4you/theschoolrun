@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card"><h1>Create parent account</h1><p class="muted">One account can manage multiple children for school-run car sharing.</p>
+<form method="post">
+<label>Your name</label><input name="name" required>
+<label>Email</label><input name="email" type="email" required>
+<p class="muted small-note">We'll send a verification email to this address. You must verify it before you can use The School Run.</p>
+<label>Password</label><input name="password" type="password" minlength="8" required>
+<label class="child-choice"><input type="checkbox" name="accept_terms" value="1" required> I have read and agree to the <a href="{{ url_for('terms') }}" target="_blank" rel="noopener">Terms & Conditions</a>.</label>
+<p class="muted small-note">By creating an account, you are confirming that you accept the Terms & Conditions.</p>
+<button type="submit">Create parent account</button>
+</form></div>
+{% endblock %}

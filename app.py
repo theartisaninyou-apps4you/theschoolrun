@@ -16,8 +16,25 @@ from werkzeug.security import generate_password_hash, check_password_hash
 load_dotenv()
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "change-this-secret-key-in-production")
-app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL", "sqlite:///carshare.db")
+app.config["SECRET_KEY"] = os.getenv(
+    "SECRET_KEY", "change-this-secret-key-in-production"
+)
+
+# Use Neon PostgreSQL on Render, or SQLite for local development.
+database_url = os.getenv("DATABASE_URL", "sqlite:///carshare.db")
+
+# Use the psycopg 3 driver installed in requirements.txt.
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace(
+        "postgres://", "postgresql+psycopg://", 1
+    )
+elif database_url.startswith("postgresql://"):
+    database_url = database_url.replace(
+        "postgresql://", "postgresql+psycopg://", 1
+    )
+
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["MAIL_SERVER"] = os.getenv("MAIL_SERVER", "smtp.gmail.com")
 app.config["MAIL_PORT"] = int(os.getenv("MAIL_PORT", "587"))
@@ -1896,23 +1913,23 @@ with app.app_context():
     from sqlalchemy import inspect
     columns = {c["name"] for c in inspect(db.engine).get_columns("pool")}
     if "allow_delegated_availability" not in columns:
-        db.session.execute(db.text("ALTER TABLE pool ADD COLUMN allow_delegated_availability BOOLEAN NOT NULL DEFAULT 1"))
+        db.session.execute(db.text("ALTER TABLE pool ADD COLUMN allow_delegated_availability BOOLEAN NOT NULL DEFAULT TRUE"))
         db.session.commit()
     user_columns = {c["name"] for c in inspect(db.engine).get_columns("user")}
     if "terms_accepted_at" not in user_columns:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN terms_accepted_at DATETIME'))
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN terms_accepted_at TIMESTAMP'))
     if "share_passenger_preference" not in user_columns:
         db.session.execute(db.text("ALTER TABLE \"user\" ADD COLUMN share_passenger_preference VARCHAR(20) NOT NULL DEFAULT 'children'"))
     if "child_assignment_preference" not in user_columns:
         db.session.execute(db.text("ALTER TABLE \"user\" ADD COLUMN child_assignment_preference VARCHAR(20) NOT NULL DEFAULT 'later'"))
     if "named_share_space" not in user_columns:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN named_share_space BOOLEAN NOT NULL DEFAULT 0'))
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN named_share_space BOOLEAN NOT NULL DEFAULT FALSE'))
     if "driver_only_availability" not in user_columns:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN driver_only_availability BOOLEAN NOT NULL DEFAULT 0'))
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN driver_only_availability BOOLEAN NOT NULL DEFAULT FALSE'))
     if "named_passenger_child_ids" not in user_columns:
         db.session.execute(db.text("ALTER TABLE \"user\" ADD COLUMN named_passenger_child_ids VARCHAR(1000) NOT NULL DEFAULT ''"))
     if "email_verified_at" not in user_columns:
-        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN email_verified_at DATETIME'))
+        db.session.execute(db.text('ALTER TABLE "user" ADD COLUMN email_verified_at TIMESTAMP'))
     availability_columns = {c["name"] for c in inspect(db.engine).get_columns("availability")}
     if "driver_mode" not in availability_columns:
         db.session.execute(db.text("ALTER TABLE availability ADD COLUMN driver_mode VARCHAR(20) NOT NULL DEFAULT 'confirmed'"))
